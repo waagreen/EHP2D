@@ -13,17 +13,18 @@ MonoBehaviour:
   m_Name: BaseCharacter
   m_EditorClassIdentifier: 
   moveSpeed: 8
-  acceleration: 36
-  deceleration: 29
-  airDeceleration: 20
-  baseGravity: -60
-  inAirGravity: -20
-  maxFallSpeed: -180
-  jumpForce: 12
-  CoyoteTime: 0.15
-  JumpBuffer: 0.2
-  inAirReleaseMultiplier: 3
-  groundMask:
+  acceleration: 13
+  deceleration: 17
+  airControlMultiplier: 0.8
+  jumpHeight: 4
+  jumpTimeToApex: 0.5
+  jumpCutGravityMultiplier: 6
+  jumpHangTimeThreshold: 0.5
+  jumpHangGravityMultiplier: 0.5
+  maxFallSpeed: 200
+  coyoteTime: 0.08
+  jumpBufferTime: 0.15
+  groundCheckDistance: 0.1
+  groundLayer:
     serializedVersion: 2
     m_Bits: 64
-  groundCheckSize: 0.7

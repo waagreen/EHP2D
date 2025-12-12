@@ -1,232 +1,395 @@
-using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
-public class PlayerController : MonoBehaviour, IPlayerController
+public class PlayerController : MonoBehaviour
 {
-    [SerializeField] private CharacterProperties _stats;
-    private Rigidbody2D _rb;
-    private CapsuleCollider2D _col;
-    private FrameInput _frameInput;
-    private Vector2 _frameVelocity;
-    private bool _cachedQueryStartInColliders;
-
-    #region Interface
-
-    public Vector2 FrameInput => _frameInput.Move;
-    public event Action<bool, float> GroundedChanged;
-    public event Action Jumped;
-
-    #endregion
-
-    private float _time;
-    private InputSystem_Actions inputMap;
-
-    private void Awake()
+    [SerializeField] private CharacterProperties stats;
+    
+    // Components
+    private Rigidbody2D rb;
+    private CapsuleCollider2D col;
+    
+    // Input
+    private InputSystem_Actions actionMap;
+    private PlayerInputs currentInputs;
+    
+    // State
+    private bool isGrounded;
+    private bool isJumping;
+    private bool isFalling;
+    private bool hitCeilingThisFrame;
+    private float coyoteTimeCounter;
+    private float jumpBufferCounter;
+    private float lastJumpPressedTime;
+    
+    // Removed cached physics values - calculate on demand instead
+    private float gravityScale;
+    
+    // Cached scale
+    private Vector2 lastScale;
+    private Vector2 scaledColliderSize;
+    private Vector2 scaledGroundCheckSize;
+    
+    // Constants
+    private const float SKIN_WIDTH = 0.02f;
+    private const float CEILING_CHECK_DISTANCE = 0.1f;
+    
+    // Property to recalculate gravity when needed
+    private float GravityScale
     {
-        _rb = GetComponent<Rigidbody2D>();
-        _col = GetComponent<CapsuleCollider2D>();
-
-        _cachedQueryStartInColliders = Physics2D.queriesStartInColliders;
-        _rb.gravityScale = 0f;
-        _rb.freezeRotation = true;
-
-        inputMap = new();
-        inputMap.Enable();
+        get
+        {
+            if (stats == null) return 0f;
+            return stats.GravityStrength / Physics2D.gravity.y;
+        }
     }
+    
+    // Property to recalculate jump velocity when needed
+    private float JumpVelocity
+    {
+        get
+        {
+            if (stats == null) return 0f;
+            return stats.InitialJumpVelocity;
+        }
+    }
+    
+    public struct PlayerInputs
+    {
+        public bool jumpHeld;
+        public bool jumpDown;
+        public Vector2 movement;
+    }
+    
+    #region Unity Lifecycle
 
+    private void Start()
+    {
+        col = GetComponent<CapsuleCollider2D>();
+        
+        rb = GetComponent<Rigidbody2D>();
+        rb.gravityScale = 0f;
+        rb.freezeRotation = true;
+        
+        actionMap = new InputSystem_Actions();
+        actionMap.Enable();
+        
+        CacheScale();
+    }
+    
     private void OnDestroy()
     {
-        inputMap.Disable();
-        inputMap = null;
+        actionMap?.Disable();
+        actionMap = null;
     }
-
+    
     private void Update()
     {
-        _time += Time.deltaTime;
-        GatherInput();
-    }
-
-    private void GatherInput()
-    {
-        _frameInput = new FrameInput
+        // Recalculate scaled values if scale changed
+        if (transform.localScale != (Vector3)lastScale)
         {
-            JumpDown = inputMap.Player.Jump.WasPressedThisFrame(),
-            JumpHeld = inputMap.Player.Jump.IsPressed(),
-            Move = inputMap.Player.Move.ReadValue<Vector2>()
-        };
-
-        if (_stats.SnapInput)
-        {
-            _frameInput.Move.x = Mathf.Abs(_frameInput.Move.x) < _stats.HorizontalDeadZoneThreshold ? 0 : Mathf.Sign(_frameInput.Move.x);
-            _frameInput.Move.y = Mathf.Abs(_frameInput.Move.y) < _stats.VerticalDeadZoneThreshold ? 0 : Mathf.Sign(_frameInput.Move.y);
+            CacheScale();
         }
-
-        if (_frameInput.JumpDown)
-        {
-            _jumpToConsume = true;
-            _timeJumpWasPressed = _time;
-        }
+        
+        ReadInputs();
+        HandleTimers();
+        HandleJumpInput();
     }
-
+    
     private void FixedUpdate()
     {
-        CheckCollisions();
-
-        HandleJump();
-        HandleDirection();
-        HandleGravity();
-        
-        ApplyMovement();
+        UpdateGroundCheck();
+        UpdateCeilingCheck();
+        HandleHorizontalMovement();
+        HandleVerticalMovement();
+        ApplyGravity();
+        ClampFallSpeed();
     }
-
-    #region Collisions
     
-    private float _frameLeftGrounded = float.MinValue;
-    private bool _grounded;
-
-    private bool CapsuleCheck(Vector2 direction, float distance)
+    #endregion
+    
+    #region Initialization
+    
+    private void CacheScale()
     {
-        Vector2 worldSize = Vector2.Scale(_col.size, transform.lossyScale);
-        Vector2 point = _col.bounds.center;
-
-        // Move start point slightly opposite of cast direction to avoid starting inside colliders
-        point -= direction * 0.02f;  
-
-        return Physics2D.CapsuleCast(
-            point,
-            worldSize,
-            _col.direction,
-            0f,
-            direction,
-            distance,
-            _stats.GroundMask
+        lastScale = transform.localScale;
+        
+        // Scale the collider size by the transform's scale
+        scaledColliderSize = new Vector2(
+            col.size.x * Mathf.Abs(transform.localScale.x),
+            col.size.y * Mathf.Abs(transform.localScale.y)
+        );
+        
+        // Ground check width should be slightly smaller than collider
+        scaledGroundCheckSize = new Vector2(
+            scaledColliderSize.x * 0.95f,
+            stats.GroundCheckDistance * Mathf.Abs(transform.localScale.y)
         );
     }
-
-    private void CheckCollisions()
-    {
-        Physics2D.queriesStartInColliders = false;
-
-        // Ground and Ceiling
-        bool groundHit = CapsuleCheck(Vector2.down, _stats.GrounderDistance);
-        bool ceilingHit = CapsuleCheck(Vector2.up, _stats.GrounderDistance);
-
-        // Hit a Ceiling
-        if (ceilingHit) _frameVelocity.y = Mathf.Min(0, _frameVelocity.y);
-
-        // Landed on the Ground
-        if (!_grounded && groundHit)
-        {
-            _grounded = true;
-            _coyoteUsable = true;
-            _bufferedJumpUsable = true;
-            _endedJumpEarly = false;
-            GroundedChanged?.Invoke(true, Mathf.Abs(_frameVelocity.y));
-        }
-        // Left the Ground
-        else if (_grounded && !groundHit)
-        {
-            _grounded = false;
-            _frameLeftGrounded = _time;
-            GroundedChanged?.Invoke(false, 0);
-        }
-
-        Physics2D.queriesStartInColliders = _cachedQueryStartInColliders;
-    }
-
+    
     #endregion
-
-
-    #region Jumping
-
-    private bool _jumpToConsume;
-    private bool _bufferedJumpUsable;
-    private bool _endedJumpEarly;
-    private bool _coyoteUsable;
-    private float _timeJumpWasPressed;
-
-    private bool HasBufferedJump => _bufferedJumpUsable && _time < _timeJumpWasPressed + _stats.JumpBuffer;
-    private bool CanUseCoyote => _coyoteUsable && !_grounded && _time < _frameLeftGrounded + _stats.CoyoteTime;
-
-    private void HandleJump()
+    
+    #region Input Handling
+    
+    private void ReadInputs()
     {
-        if (!_endedJumpEarly && !_grounded && !_frameInput.JumpHeld && _rb.linearVelocity.y > 0) _endedJumpEarly = true;
-
-        if (!_jumpToConsume && !HasBufferedJump) return;
-
-        if (_grounded || CanUseCoyote) ExecuteJump();
-
-        _jumpToConsume = false;
+        currentInputs = new PlayerInputs()
+        {
+            jumpDown = actionMap.Player.Jump.WasPressedThisFrame(),
+            jumpHeld = actionMap.Player.Jump.IsPressed(),
+            movement = actionMap.Player.Move.ReadValue<Vector2>()
+        };
+        
+        if (currentInputs.jumpDown)
+        {
+            lastJumpPressedTime = Time.time;
+        }
     }
-
+    
+    private void HandleTimers()
+    {
+        if (stats == null) return;
+        
+        // Coyote time
+        coyoteTimeCounter = isGrounded ? stats.CoyoteTime : coyoteTimeCounter - Time.deltaTime;
+        
+        // Jump buffer
+        jumpBufferCounter = currentInputs.jumpDown ? stats.JumpBufferTime : jumpBufferCounter - Time.deltaTime;
+    }
+    
+    private void HandleJumpInput()
+    {
+        if (jumpBufferCounter > 0 && CanJump())
+        {
+            ExecuteJump();
+        }
+    }
+    
+    #endregion
+    
+    #region Movement
+    
+    private void HandleHorizontalMovement()
+    {
+        if (stats == null) return;
+        
+        float targetSpeed = currentInputs.movement.x * stats.MoveSpeed;
+        float speedDiff = targetSpeed - rb.linearVelocity.x;
+        float accelerationRate = Mathf.Abs(targetSpeed) > 0.01f ? stats.Acceleration : stats.Deceleration;
+        
+        // Reduce air control
+        if (!isGrounded)
+        {
+            accelerationRate *= stats.AirControlMultiplier;
+        }
+        
+        float movement = Mathf.Pow(Mathf.Abs(speedDiff) * accelerationRate, 0.75f) * Mathf.Sign(speedDiff);
+        rb.AddForce(movement * Vector2.right);
+    }
+    
+    private void HandleVerticalMovement()
+    {
+        if (hitCeilingThisFrame && rb.linearVelocity.y > 0)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, 0);
+            isJumping = false;
+        }
+    }
+    
+    private void ApplyGravity()
+    {
+        if (isGrounded && rb.linearVelocity.y <= 0)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -0.1f);
+            isJumping = false;
+            isFalling = false;
+            return;
+        }
+        
+        float currentGravity = GravityScale;
+        
+        // Jump cut (quick fall when jump button released)
+        if (!currentInputs.jumpHeld && rb.linearVelocity.y > 0 && isJumping)
+        {
+            currentGravity *= stats.JumpCutGravityMultiplier;
+        }
+        
+        // Jump hang (float at peak of jump)
+        if (Mathf.Abs(rb.linearVelocity.y) < stats.JumpHangTimeThreshold && isJumping)
+        {
+            currentGravity *= stats.JumpHangGravityMultiplier;
+        }
+        
+        rb.linearVelocity += Vector2.up * (Physics2D.gravity.y * currentGravity * Time.fixedDeltaTime);
+        
+        // Update jump/fall states
+        if (rb.linearVelocity.y > 0 && !isGrounded)
+        {
+            isJumping = true;
+            isFalling = false;
+        }
+        else if (rb.linearVelocity.y < 0 && !isGrounded)
+        {
+            isJumping = false;
+            isFalling = true;
+        }
+    }
+    
+    private void ClampFallSpeed()
+    {
+        if (stats == null) return;
+        
+        if (rb.linearVelocity.y < -stats.MaxFallSpeed)
+        {
+            rb.linearVelocity = new Vector2(rb.linearVelocity.x, -stats.MaxFallSpeed);
+        }
+    }
+    
+    private bool CanJump()
+    {
+        if (stats == null) return false;
+        
+        return (isGrounded || coyoteTimeCounter > 0) && !isJumping;
+    }
+    
     private void ExecuteJump()
     {
-        _timeJumpWasPressed = 0;
-        
-        _endedJumpEarly = false;
-        _bufferedJumpUsable = false;
-        _coyoteUsable = false;
-        
-        _frameVelocity.y = _stats.JumpPower;
-        
-        Jumped?.Invoke();
+        rb.linearVelocity = new Vector2(rb.linearVelocity.x, JumpVelocity);
+        isJumping = true;
+        isFalling = false;
+        coyoteTimeCounter = 0;
+        jumpBufferCounter = 0;
     }
-
+    
     #endregion
-
-    #region Horizontal
-
-    private void HandleDirection()
+    
+    #region Physics Checks
+    
+    private void UpdateGroundCheck()
     {
-        if (_frameInput.Move.x == 0)
-        {
-            var deceleration = _grounded ? _stats.GroundDeceleration : _stats.AirDeceleration;
-            _frameVelocity.x = Mathf.MoveTowards(_frameVelocity.x, 0, deceleration * Time.fixedDeltaTime);
-        }
-        else
-        {
-            _frameVelocity.x = Mathf.MoveTowards(_frameVelocity.x, _frameInput.Move.x * _stats.MaxSpeed, _stats.Acceleration * Time.fixedDeltaTime);
-        }
+        if (stats == null) return;
+        
+        // Calculate ground check position based on scaled collider
+        Vector2 checkPosition = (Vector2)transform.position + 
+                              Vector2.Scale(col.offset, transform.localScale) - 
+                              Vector2.up * (scaledColliderSize.y * 0.5f);
+        
+        RaycastHit2D hit = Physics2D.BoxCast(
+            checkPosition, 
+            scaledGroundCheckSize, 
+            0f, 
+            Vector2.down, 
+            SKIN_WIDTH * Mathf.Abs(transform.localScale.y), 
+            stats.GroundLayer
+        );
+        
+        isGrounded = hit.collider != null;
     }
-
-    #endregion
-
-    #region Gravity
-
-    private void HandleGravity()
+    
+    private void UpdateCeilingCheck()
     {
-        if (_grounded && _frameVelocity.y <= 0f)
+        if (stats == null) return;
+        
+        // Calculate ceiling check position based on scaled collider
+        Vector2 checkPosition = (Vector2)transform.position + 
+                              Vector2.Scale(col.offset, transform.localScale) + 
+                              Vector2.up * (scaledColliderSize.y * 0.5f);
+        
+        RaycastHit2D hit = Physics2D.BoxCast(
+            checkPosition, 
+            scaledGroundCheckSize, 
+            0f, 
+            Vector2.up, 
+            CEILING_CHECK_DISTANCE * Mathf.Abs(transform.localScale.y), 
+            stats.GroundLayer
+        );
+        
+        hitCeilingThisFrame = hit.collider != null;
+    }
+    
+    #endregion
+    
+    #region Helper Properties
+    
+    // Helper property to get world-space collider bounds
+    public Bounds WorldColliderBounds
+    {
+        get
         {
-            _frameVelocity.y = _stats.GroundingForce;
-        }
-        else
-        {
-            var inAirGravity = _stats.FallAcceleration;
-            if (_endedJumpEarly && _frameVelocity.y > 0) inAirGravity *= _stats.JumpEndEarlyGravityModifier;
-            _frameVelocity.y = Mathf.MoveTowards(_frameVelocity.y, -_stats.MaxFallSpeed, inAirGravity * Time.fixedDeltaTime);
+            Vector2 scaledOffset = Vector2.Scale(col.offset, transform.localScale);
+            Vector2 center = (Vector2)transform.position + scaledOffset;
+            Vector2 size = scaledColliderSize;
+            return new Bounds(center, size);
         }
     }
-
+    
     #endregion
-
-    private void ApplyMovement() => _rb.linearVelocity = _frameVelocity;
+    
+    #region Public Methods
+    
+    public void Teleport(Vector2 position)
+    {
+        rb.position = position;
+        rb.linearVelocity = Vector2.zero;
+    }
+    
+    public void ResetVelocity()
+    {
+        rb.linearVelocity = Vector2.zero;
+    }
+    
+    // Call this method if you want to manually refresh stats
+    public void RefreshStats()
+    {
+        // Recalculate scale if needed
+        if (transform.localScale != (Vector3)lastScale)
+        {
+            CacheScale();
+        }
+    }
+    
+    #endregion
+    
+    #region Debug
+    
+    private void OnDrawGizmosSelected()
+    {
+        if (col == null || stats == null) return;
+        
+        // Use actual scale in editor too
+        Vector2 currentScale = Application.isPlaying ? lastScale : (Vector2)transform.localScale;
+        Vector2 scaledSize = new Vector2(
+            col.size.x * Mathf.Abs(currentScale.x),
+            col.size.y * Mathf.Abs(currentScale.y)
+        );
+        
+        Vector2 scaledOffset = Vector2.Scale(col.offset, currentScale);
+        
+        // Ground check
+        Gizmos.color = isGrounded ? Color.green : Color.red;
+        Vector2 groundCheckPos = (Vector2)transform.position + scaledOffset - Vector2.up * (scaledSize.y * 0.5f);
+        Vector2 groundCheckDisplaySize = new Vector2(
+            scaledSize.x * 0.95f,
+            stats.GroundCheckDistance * Mathf.Abs(currentScale.y)
+        );
+        
+        Gizmos.DrawWireCube(
+            groundCheckPos - Vector2.down * (stats.GroundCheckDistance * Mathf.Abs(currentScale.y) * 0.5f), 
+            groundCheckDisplaySize
+        );
+        
+        // Ceiling check
+        Gizmos.color = Color.yellow;
+        Vector2 ceilingCheckPos = (Vector2)transform.position + scaledOffset + Vector2.up * (scaledSize.y * 0.5f);
+        Gizmos.DrawWireCube(
+            ceilingCheckPos + Vector2.up * (CEILING_CHECK_DISTANCE * Mathf.Abs(currentScale.y) * 0.5f), 
+            groundCheckDisplaySize
+        );
+        
+        // Collider bounds
+        Gizmos.color = Color.cyan;
+        Gizmos.DrawWireCube((Vector2)transform.position + scaledOffset, scaledSize);
+    }
+    
+    #endregion
 }
-
-public struct FrameInput
-{
-    public bool JumpDown;
-    public bool JumpHeld;
-    public Vector2 Move;
-}
-
-public interface IPlayerController
-{
-    public event Action<bool, float> GroundedChanged;
-
-    public event Action Jumped;
-    public Vector2 FrameInput { get; }
-}
-
-
-

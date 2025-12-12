@@ -1,53 +1,45 @@
 using UnityEngine;
 
-[CreateAssetMenu(fileName = "CharacterProperties", menuName = "Characters/Properties")]
+[CreateAssetMenu(fileName = "CharacterProperties", menuName = "Player/Character Properties")]
 public class CharacterProperties : ScriptableObject
 {
-    [Header("LAYERS")] [Tooltip("Set this to the layer your player is on")]
-    public LayerMask GroundMask;
+    [Header("Movement")]
+    [SerializeField] private float moveSpeed = 8f;
+    [SerializeField] private float acceleration = 15f;
+    [SerializeField] private float deceleration = 12f;
+    [SerializeField] private float airControlMultiplier = 0.8f;
 
-    [Header("INPUT")] [Tooltip("Makes all Input snap to an integer. Prevents gamepads from walking slowly. Recommended value is true to ensure gamepad/keybaord parity.")]
-    public bool SnapInput = true;
+    [Header("Jump")]
+    [SerializeField] private float jumpHeight = 3f;
+    [SerializeField] private float jumpTimeToApex = 0.4f;
+    [SerializeField] private float jumpCutGravityMultiplier = 1.5f;
+    [SerializeField] private float jumpHangTimeThreshold = 0.5f;
+    [SerializeField] private float jumpHangGravityMultiplier = 0.5f;
+    [SerializeField] private float maxFallSpeed = 15f;
 
-    [Tooltip("Minimum input required before you mount a ladder or climb a ledge. Avoids unwanted climbing using controllers"), Range(0.01f, 0.99f)]
-    public float VerticalDeadZoneThreshold = 0.3f;
+    [Header("Coyote & Buffer")]
+    [SerializeField] private float coyoteTime = 0.1f;
+    [SerializeField] private float jumpBufferTime = 0.15f;
 
-    [Tooltip("Minimum input required before a left or right is recognized. Avoids drifting with sticky controllers"), Range(0.01f, 0.99f)]
-    public float HorizontalDeadZoneThreshold = 0.1f;
-
-    [Header("MOVEMENT")] [Tooltip("The top horizontal movement speed")]
-    public float MaxSpeed = 14;
-
-    [Tooltip("The player's capacity to gain horizontal speed")]
-    public float Acceleration = 120;
-
-    [Tooltip("The pace at which the player comes to a stop")]
-    public float GroundDeceleration = 60;
-
-    [Tooltip("Deceleration in air only after stopping input mid-air")]
-    public float AirDeceleration = 30;
-
-    [Tooltip("A constant downward force applied while grounded. Helps on slopes"), Range(0f, -10f)]
-    public float GroundingForce = -1.5f;
-
-    [Tooltip("The detection distance for grounding and roof detection"), Range(0f, 0.5f)]
-    public float GrounderDistance = 0.05f;
-
-    [Header("JUMP")] [Tooltip("The immediate velocity applied when jumping")]
-    public float JumpPower = 36;
-
-    [Tooltip("The maximum vertical movement speed")]
-    public float MaxFallSpeed = 40;
-
-    [Tooltip("The player's capacity to gain fall speed. a.k.a. In Air Gravity")]
-    public float FallAcceleration = 110;
-
-    [Tooltip("The gravity multiplier added when jump is released early")]
-    public float JumpEndEarlyGravityModifier = 3;
-
-    [Tooltip("The time before coyote jump becomes unusable. Coyote jump allows jump to execute even after leaving a ledge")]
-    public float CoyoteTime = .15f;
-
-    [Tooltip("The amount of time we buffer a jump. This allows jump input before actually hitting the ground")]
-    public float JumpBuffer = .2f;
+    [Header("Ground Check")]
+    [SerializeField] private float groundCheckDistance = 0.1f;
+    [SerializeField] private LayerMask groundLayer = ~0;
+    
+    // Public getters with calculation on demand
+    public float GravityStrength => -(2 * jumpHeight) / (jumpTimeToApex * jumpTimeToApex);
+    public float InitialJumpVelocity => Mathf.Abs(GravityStrength) * jumpTimeToApex;
+    
+    // Public getters
+    public float MoveSpeed => moveSpeed;
+    public float Acceleration => acceleration;
+    public float Deceleration => deceleration;
+    public float AirControlMultiplier => airControlMultiplier;
+    public float JumpCutGravityMultiplier => jumpCutGravityMultiplier;
+    public float JumpHangTimeThreshold => jumpHangTimeThreshold;
+    public float JumpHangGravityMultiplier => jumpHangGravityMultiplier;
+    public float MaxFallSpeed => maxFallSpeed;
+    public float CoyoteTime => coyoteTime;
+    public float JumpBufferTime => jumpBufferTime;
+    public float GroundCheckDistance => groundCheckDistance;
+    public LayerMask GroundLayer => groundLayer;
 }

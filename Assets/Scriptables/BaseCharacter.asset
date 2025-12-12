@@ -15,11 +15,15 @@ MonoBehaviour:
   moveSpeed: 8
   acceleration: 36
   deceleration: 29
-  baseGravity: -30
+  airDeceleration: 20
+  baseGravity: -60
   inAirGravity: -20
-  maxFallSpeed: -100
-  jumpForce: 10
+  maxFallSpeed: -180
+  jumpForce: 12
+  CoyoteTime: 0.15
+  JumpBuffer: 0.2
+  inAirReleaseMultiplier: 3
   groundMask:
     serializedVersion: 2
-    m_Bits: 65
-  groundCheckSize: 0.95
+    m_Bits: 64
+  groundCheckSize: 0.7

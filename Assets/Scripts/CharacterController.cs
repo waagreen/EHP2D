@@ -1,13 +1,15 @@
+using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
-public class PlayerController : MonoBehaviour
+public class CharacterController : MonoBehaviour
 {
     [SerializeField] private CharacterProperties stats;
     
     // Components
     private Rigidbody2D rb;
     private CapsuleCollider2D col;
+    private CharacterGrabber grabber;
     
     // Input
     private InputSystem_Actions actionMap;
@@ -22,6 +24,7 @@ public class PlayerController : MonoBehaviour
     private float jumpBufferCounter;
     private float lastJumpPressedTime;
     private float gravityScale;
+    private float lastInputX;
     
     // Cached scale
     private Vector2 lastScale;
@@ -69,9 +72,13 @@ public class PlayerController : MonoBehaviour
         rb.gravityScale = 0f;
         rb.freezeRotation = true;
         
+        if(TryGetComponent(out CharacterGrabber attachedGrabber)) grabber = attachedGrabber;
+
         actionMap = new InputSystem_Actions();
         actionMap.Enable();
-        
+        grabber.Setup(actionMap, rb, stats.MaxThrowForce, stats.ThrowForceIncrement);
+
+        transform.localScale = Vector3.one * stats.CharacterInitalSize;
         CacheScale();
     }
     
@@ -141,7 +148,9 @@ public class PlayerController : MonoBehaviour
             jumpHeld = actionMap.Player.Jump.IsPressed(),
             movement = actionMap.Player.Move.ReadValue<Vector2>()
         };
-        
+
+        if (currentInputs.movement.x != 0) lastInputX = currentInputs.movement.x;
+
         if (currentInputs.jumpDown)
         {
             lastJumpPressedTime = Time.time;
@@ -189,6 +198,11 @@ public class PlayerController : MonoBehaviour
         // “When I’m far from my target speed, accelerate smoothly. When I’m close, correct aggressively.”
         float movement = Mathf.Pow(Mathf.Abs(speedDiff) * accelerationRate, stats.AccelerationCurve) * Mathf.Sign(speedDiff);
         rb.AddForce(movement * Vector2.right);
+        
+        // Re-orient transform based on input direction
+        Vector3 newScale = Vector3.one * stats.CharacterInitalSize;
+        newScale.x *= Mathf.Sign(lastInputX);
+        transform.localScale = newScale;
     }
     
     private void HandleVerticalMovement()

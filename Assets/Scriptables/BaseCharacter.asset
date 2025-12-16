@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 00eab1bb4b97b874f9e822d8d18fbdac, type: 3}
   m_Name: BaseCharacter
   m_EditorClassIdentifier: 
+  CharacterInitalSize: 0.7
   MoveSpeed: 8
+  HoldingMultiplier: 0.8
   Acceleration: 15
   Deceleration: 12
   AccelerationCurve: 0.75
@@ -25,6 +27,8 @@ MonoBehaviour:
   MaxFallSpeed: 150
   CoyoteTime: 0.1
   JumpBufferTime: 0.15
+  MaxThrowForce: 8
+  ThrowForceIncrement: 3
   GroundCheckDistance: 0.1
   GroundLayer:
     serializedVersion: 2

@@ -12,19 +12,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 00eab1bb4b97b874f9e822d8d18fbdac, type: 3}
   m_Name: BaseCharacter
   m_EditorClassIdentifier: 
-  moveSpeed: 8
-  acceleration: 13
-  deceleration: 17
-  airControlMultiplier: 0.8
-  jumpHeight: 4
-  jumpTimeToApex: 0.5
-  jumpCutGravityMultiplier: 6
-  jumpHangTimeThreshold: 0.5
-  jumpHangGravityMultiplier: 0.5
-  maxFallSpeed: 200
-  coyoteTime: 0.08
-  jumpBufferTime: 0.15
-  groundCheckDistance: 0.1
-  groundLayer:
+  MoveSpeed: 8
+  Acceleration: 15
+  Deceleration: 12
+  AccelerationCurve: 0.75
+  AirControlMultiplier: 0.6
+  JumpHeight: 4
+  JumpTimeToApex: 0.5
+  JumpCutGravityMultiplier: 5
+  JumpHangTimeThreshold: 0.4
+  JumpHangGravityMultiplier: 0.6
+  MaxFallSpeed: 150
+  CoyoteTime: 0.1
+  JumpBufferTime: 0.15
+  GroundCheckDistance: 0.1
+  GroundLayer:
     serializedVersion: 2
     m_Bits: 64

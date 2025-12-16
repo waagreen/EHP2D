@@ -21,20 +21,19 @@ public class PlayerController : MonoBehaviour
     private float coyoteTimeCounter;
     private float jumpBufferCounter;
     private float lastJumpPressedTime;
-    
-    // Removed cached physics values - calculate on demand instead
     private float gravityScale;
     
     // Cached scale
     private Vector2 lastScale;
     private Vector2 scaledColliderSize;
     private Vector2 scaledGroundCheckSize;
+    private Vector2 ScaledUpVector => Vector2.up * (scaledColliderSize.y * 0.5f);
+    private Vector2 LocalScaledVector => Vector2.Scale(col.offset, transform.localScale);
     
     // Constants
     private const float SKIN_WIDTH = 0.02f;
     private const float CEILING_CHECK_DISTANCE = 0.1f;
     
-    // Property to recalculate gravity when needed
     private float GravityScale
     {
         get
@@ -44,7 +43,6 @@ public class PlayerController : MonoBehaviour
         }
     }
     
-    // Property to recalculate jump velocity when needed
     private float JumpVelocity
     {
         get
@@ -100,8 +98,10 @@ public class PlayerController : MonoBehaviour
     {
         UpdateGroundCheck();
         UpdateCeilingCheck();
+        
         HandleHorizontalMovement();
         HandleVerticalMovement();
+        
         ApplyGravity();
         ClampFallSpeed();
     }
@@ -115,13 +115,15 @@ public class PlayerController : MonoBehaviour
         lastScale = transform.localScale;
         
         // Scale the collider size by the transform's scale
-        scaledColliderSize = new Vector2(
+        scaledColliderSize = new Vector2
+        (
             col.size.x * Mathf.Abs(transform.localScale.x),
             col.size.y * Mathf.Abs(transform.localScale.y)
         );
         
         // Ground check width should be slightly smaller than collider
-        scaledGroundCheckSize = new Vector2(
+        scaledGroundCheckSize = new Vector2
+        (
             scaledColliderSize.x * 0.95f,
             stats.GroundCheckDistance * Mathf.Abs(transform.localScale.y)
         );
@@ -159,7 +161,7 @@ public class PlayerController : MonoBehaviour
     
     private void HandleJumpInput()
     {
-        if (jumpBufferCounter > 0 && CanJump())
+        if (jumpBufferCounter > 0f && CanJump())
         {
             ExecuteJump();
         }
@@ -183,7 +185,9 @@ public class PlayerController : MonoBehaviour
             accelerationRate *= stats.AirControlMultiplier;
         }
         
-        float movement = Mathf.Pow(Mathf.Abs(speedDiff) * accelerationRate, 0.75f) * Mathf.Sign(speedDiff);
+        // Non-linear acceleration for smoother movement 
+        // “When I’m far from my target speed, accelerate smoothly. When I’m close, correct aggressively.”
+        float movement = Mathf.Pow(Mathf.Abs(speedDiff) * accelerationRate, stats.AccelerationCurve) * Mathf.Sign(speedDiff);
         rb.AddForce(movement * Vector2.right);
     }
     
@@ -265,16 +269,14 @@ public class PlayerController : MonoBehaviour
     
     #region Physics Checks
     
+    
     private void UpdateGroundCheck()
     {
         if (stats == null) return;
         
-        // Calculate ground check position based on scaled collider
-        Vector2 checkPosition = (Vector2)transform.position + 
-                              Vector2.Scale(col.offset, transform.localScale) - 
-                              Vector2.up * (scaledColliderSize.y * 0.5f);
-        
-        RaycastHit2D hit = Physics2D.BoxCast(
+        Vector2 checkPosition = (Vector2)transform.position + LocalScaledVector - ScaledUpVector;
+        RaycastHit2D hit = Physics2D.BoxCast
+        (
             checkPosition, 
             scaledGroundCheckSize, 
             0f, 
@@ -290,12 +292,9 @@ public class PlayerController : MonoBehaviour
     {
         if (stats == null) return;
         
-        // Calculate ceiling check position based on scaled collider
-        Vector2 checkPosition = (Vector2)transform.position + 
-                              Vector2.Scale(col.offset, transform.localScale) + 
-                              Vector2.up * (scaledColliderSize.y * 0.5f);
-        
-        RaycastHit2D hit = Physics2D.BoxCast(
+        Vector2 checkPosition = (Vector2)transform.position + LocalScaledVector + ScaledUpVector;
+        RaycastHit2D hit = Physics2D.BoxCast
+        (
             checkPosition, 
             scaledGroundCheckSize, 
             0f, 
@@ -338,7 +337,6 @@ public class PlayerController : MonoBehaviour
         rb.linearVelocity = Vector2.zero;
     }
     
-    // Call this method if you want to manually refresh stats
     public void RefreshStats()
     {
         // Recalculate scale if needed
@@ -356,9 +354,9 @@ public class PlayerController : MonoBehaviour
     {
         if (col == null || stats == null) return;
         
-        // Use actual scale in editor too
         Vector2 currentScale = Application.isPlaying ? lastScale : (Vector2)transform.localScale;
-        Vector2 scaledSize = new Vector2(
+        Vector2 scaledSize = new
+        (
             col.size.x * Mathf.Abs(currentScale.x),
             col.size.y * Mathf.Abs(currentScale.y)
         );
@@ -368,12 +366,14 @@ public class PlayerController : MonoBehaviour
         // Ground check
         Gizmos.color = isGrounded ? Color.green : Color.red;
         Vector2 groundCheckPos = (Vector2)transform.position + scaledOffset - Vector2.up * (scaledSize.y * 0.5f);
-        Vector2 groundCheckDisplaySize = new Vector2(
+        Vector2 groundCheckDisplaySize = new
+        (
             scaledSize.x * 0.95f,
             stats.GroundCheckDistance * Mathf.Abs(currentScale.y)
         );
         
-        Gizmos.DrawWireCube(
+        Gizmos.DrawWireCube
+        (
             groundCheckPos - Vector2.down * (stats.GroundCheckDistance * Mathf.Abs(currentScale.y) * 0.5f), 
             groundCheckDisplaySize
         );
@@ -381,7 +381,8 @@ public class PlayerController : MonoBehaviour
         // Ceiling check
         Gizmos.color = Color.yellow;
         Vector2 ceilingCheckPos = (Vector2)transform.position + scaledOffset + Vector2.up * (scaledSize.y * 0.5f);
-        Gizmos.DrawWireCube(
+        Gizmos.DrawWireCube
+        (
             ceilingCheckPos + Vector2.up * (CEILING_CHECK_DISTANCE * Mathf.Abs(currentScale.y) * 0.5f), 
             groundCheckDisplaySize
         );

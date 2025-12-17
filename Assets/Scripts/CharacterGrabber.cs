@@ -11,10 +11,10 @@ public class CharacterGrabber : MonoBehaviour
     private Rigidbody2D rb;
     private Egg egg, potentialEgg;
 
-    private bool isHolding, canGrab;
-    private float maxForce, forceIncrement, deltaForce, lastInputX;
-    
-    public bool IsHolding => isHolding;
+    private float maxForce, forceIncrement, deltaForce, lastInputX, grabTime;
+    private const float kTapThreshold = 0.2f;
+
+    public bool IsHolding => egg;
 
     public void Setup(InputSystem_Actions inputMap, Rigidbody2D rb, float maxForce, float forceIncrement)
     {
@@ -30,9 +30,14 @@ public class CharacterGrabber : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (isHolding && egg && inputMap.Player.Attack.IsPressed())
+        if (IsHolding && inputMap.Player.Attack.IsPressed())
         {
-            ChargeThrow();
+            deltaForce += forceIncrement * Time.deltaTime;
+            if (deltaForce > maxForce)
+            {
+                deltaForce = maxForce;
+                Release();
+            }
         }
     }
 
@@ -44,34 +49,18 @@ public class CharacterGrabber : MonoBehaviour
 
     private void OnAttackStarted(InputAction.CallbackContext ctx)
     {
-        if (!isHolding && canGrab)
+        if (!IsHolding)
         {
-            // Grab if we're not holding anything but can grab
+            grabTime = Time.time;
             Grab();
-        }
-        else if (isHolding && egg)
-        {
-            // If already holding, start charging throw
-            deltaForce = 0f;
         }
     }
 
     private void OnAttackCanceled(InputAction.CallbackContext ctx)
     {
-        if (isHolding && egg)
+        float holdDuration = Time.time - grabTime;
+        if (IsHolding && (holdDuration > kTapThreshold))
         {
-            // Release when button is released, with the charged force
-            Release();
-        }
-    }
-
-    private void ChargeThrow()
-    {
-        deltaForce += forceIncrement * Time.deltaTime;
-        if (deltaForce >= maxForce)
-        {
-            deltaForce = maxForce;
-            // Auto-release at max force
             Release();
         }
     }
@@ -83,7 +72,7 @@ public class CharacterGrabber : MonoBehaviour
         deltaForce = 0f;
         egg = potentialEgg;
         egg.SetHolderRigidBody(rb, connectionPoint);
-        isHolding = true;
+        egg.CanGrabFeedback(false);
         
         potentialEgg = null;
     }
@@ -96,18 +85,16 @@ public class CharacterGrabber : MonoBehaviour
 
         egg.ResetHolderRigidBody(throwForce);
         egg = null;
-        isHolding = false;
         deltaForce = 0f;
     }
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        if (egg || potentialEgg) return;
+        if (IsHolding || potentialEgg) return;
         if (((1 << collision.gameObject.layer) & grabbableMask) != 0)
         {
             if (collision.TryGetComponent(out Egg foundEgg))
             {
-                canGrab = true;            
                 potentialEgg = foundEgg;
                 potentialEgg.CanGrabFeedback(true);
             }
@@ -118,7 +105,6 @@ public class CharacterGrabber : MonoBehaviour
     {
         if (((1 << collision.gameObject.layer) & grabbableMask) != 0)
         {
-            canGrab = false;
             if (potentialEgg) potentialEgg.CanGrabFeedback(false);            
             potentialEgg = null;
         }

@@ -27,7 +27,7 @@ MonoBehaviour:
   MaxFallSpeed: 150
   CoyoteTime: 0.1
   JumpBufferTime: 0.15
-  MaxThrowForce: 8
+  MaxThrowForce: 6
   ThrowForceIncrement: 3
   GroundCheckDistance: 0.1
   GroundLayer:

@@ -1,11 +1,15 @@
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public class CharacterGrabber : MonoBehaviour
 {
     [SerializeField] private CircleCollider2D range;
     [SerializeField] private LayerMask grabbableMask;
     [SerializeField] private Transform connectionPoint;
+    [SerializeField] private Image throwFillForce;
+    [SerializeField][Min(0f)] private float maxDistance = 3f;
+    
     
     private InputSystem_Actions inputMap;
     private Rigidbody2D rb;
@@ -33,11 +37,18 @@ public class CharacterGrabber : MonoBehaviour
         if (IsHolding && inputMap.Player.Attack.IsPressed())
         {
             deltaForce += forceIncrement * Time.deltaTime;
+            UpdateFill();
+
             if (deltaForce > maxForce)
             {
                 deltaForce = maxForce;
                 Release();
             }
+        }
+
+        if (egg && (Vector2.Distance(egg.transform.position, transform.position) > maxDistance))
+        {
+            Release();
         }
     }
 
@@ -65,11 +76,20 @@ public class CharacterGrabber : MonoBehaviour
         }
     }
 
+    private void UpdateFill()
+    {
+        float t = deltaForce / maxForce;
+        throwFillForce.fillAmount = t;
+        throwFillForce.color = Color.Lerp(Color.red, Color.green, t);
+    }
+
     private void Grab()
     {
         if (egg || !potentialEgg) return;
         
         deltaForce = 0f;
+        throwFillForce.fillAmount = 0f;
+        
         egg = potentialEgg;
         egg.SetHolderRigidBody(rb, connectionPoint);
         egg.CanGrabFeedback(false);
@@ -86,6 +106,7 @@ public class CharacterGrabber : MonoBehaviour
         egg.ResetHolderRigidBody(throwForce);
         egg = null;
         deltaForce = 0f;
+        throwFillForce.fillAmount = 0f;
     }
 
     private void OnTriggerEnter2D(Collider2D collision)

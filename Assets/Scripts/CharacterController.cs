@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 
 [RequireComponent(typeof(Rigidbody2D), typeof(CapsuleCollider2D))]
-public class CharacterController : MonoBehaviour
+public class CharacterController2D : MonoBehaviour
 {
     [SerializeField] private CharacterProperties stats;
     
@@ -216,6 +216,7 @@ public class CharacterController : MonoBehaviour
     
     private void ApplyGravity()
     {
+        // Stop applying force when grounded
         if (isGrounded && rb.linearVelocity.y <= 0)
         {
             rb.linearVelocity = new Vector2(rb.linearVelocity.x, -0.1f);

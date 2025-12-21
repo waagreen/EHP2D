@@ -23,7 +23,6 @@ public class CharacterController2D : MonoBehaviour
     private float coyoteTimeCounter;
     private float jumpBufferCounter;
     private float lastJumpPressedTime;
-    private float gravityScale;
     private float lastInputX;
     
     // Cached scale

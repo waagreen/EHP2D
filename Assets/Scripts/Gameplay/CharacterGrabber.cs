@@ -15,7 +15,7 @@ public class CharacterGrabber : MonoBehaviour
     private Rigidbody2D rb;
     private Egg egg, potentialEgg;
 
-    private float maxForce, forceIncrement, deltaForce, lastInputX, grabTime;
+    private float maxForce, forceIncrement, deltaForce, lastInputX, grabTime, holdDuration;
     private const float kTapThreshold = 0.2f;
 
     public bool IsHolding => egg;
@@ -34,7 +34,8 @@ public class CharacterGrabber : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (IsHolding && inputMap.Player.Attack.IsPressed())
+        holdDuration = Time.time - grabTime;
+        if (IsHolding && inputMap.Player.Attack.IsPressed() && holdDuration > kTapThreshold)
         {
             deltaForce += forceIncrement * Time.deltaTime;
             UpdateFill();
@@ -69,7 +70,6 @@ public class CharacterGrabber : MonoBehaviour
 
     private void OnAttackCanceled(InputAction.CallbackContext ctx)
     {
-        float holdDuration = Time.time - grabTime;
         if (IsHolding && (holdDuration > kTapThreshold))
         {
             Release();
